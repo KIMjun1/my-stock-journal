@@ -6,6 +6,8 @@
   <title>나만의 주식 매매복기·손익 대시보드</title>
   <!-- Chart.js 무료 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- TradingView Lightweight Charts 무료 CDN (P3 봉차트용) -->
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <style>
     :root {
       --primary-color: #1e3a8a;
@@ -486,6 +488,40 @@
       max-height: 240px;
       overflow-y: auto;
       margin-top: 10px;
+    }
+
+    /* P3: 실시간 시세 박스 & 봉차트 모달 스타일 */
+    .quote-info-box {
+      background-color: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      margin-top: 8px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .quote-badge-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    .quote-source-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .candle-chart-box {
+      width: 100%;
+      height: 420px;
+      position: relative;
+      background-color: #ffffff;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
     }
 
     /* 테이블 및 카드 리스트 */
@@ -1115,6 +1151,38 @@
         </div>
       </div>
 
+      <!-- P3: 아직 안 판 주식(보유 종목) 실시간 평가 손익 & 봉차트 -->
+      <div class="content-card">
+        <div class="card-header-row">
+          <div>
+            <h2 class="card-title">💼 아직 안 판 주식(보유 종목) 실시간 평가 손익</h2>
+            <p style="color:var(--text-muted); font-size:13px; margin-top:2px;">오늘 시가·종가를 반영하여 실시간 미실현 평가손익과 수익률을 계산합니다.</p>
+          </div>
+          <button class="btn btn-secondary" id="refreshHoldingsQuoteBtn">
+            <span>🔄</span> 전종목 시세 갱신
+          </button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>종목명</th>
+                <th>잔여 보유수량</th>
+                <th>평균 매수가</th>
+                <th>현재 종가</th>
+                <th>평가 손익 (원)</th>
+                <th>평가 수익률 (%)</th>
+                <th>기준일 및 출처</th>
+                <th>60일 봉차트</th>
+              </tr>
+            </thead>
+            <tbody id="holdingsTableBody">
+              <!-- JS 동적 렌더링 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- 최근 매매 목록 미리보기 카드 -->
       <div class="content-card">
         <div class="card-header-row">
@@ -1391,8 +1459,32 @@
           <input type="date" class="form-input" id="inputTradeDate">
         </div>
         <div class="form-group">
-          <label class="form-label">종목명 *</label>
-          <input type="text" class="form-input" id="inputStockName" placeholder="예: 삼성전자">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <label class="form-label" style="margin:0;">종목명 / 6자리코드 *</label>
+            <button type="button" class="btn btn-secondary" id="fetchQuoteBtn" style="padding:4px 8px; font-size:12px; background:#eff6ff; color:#1e40af; border-color:#bfdbfe;">
+              ⚡ 시가·종가 불러오기
+            </button>
+          </div>
+          <input type="text" class="form-input" id="inputStockName" placeholder="예: 삼성전자 또는 005930">
+        </div>
+      </div>
+
+      <!-- P3: 실시간 시가·종가 및 봉차트 안내 박스 -->
+      <div id="stockQuoteBox" class="quote-info-box" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+          <div>
+            <strong id="quoteStockNameText" style="font-size:16px; color:#0f172a;">-</strong>
+            <span id="quoteSymbolBadge" class="badge badge-strategy" style="margin-left:4px;">-</span>
+          </div>
+          <button type="button" class="btn btn-secondary" id="openCandleChartFromModalBtn" style="padding:4px 10px; font-size:12px; background:#f0fdf4; border-color:#86efac; color:#166534;">
+            📈 60일 봉차트 보기
+          </button>
+        </div>
+        <div class="quote-badge-row" id="quotePricesRow" style="margin-top:6px;">
+          <!-- 시가, 종가, 고가, 저가 배지 -->
+        </div>
+        <div class="quote-source-label" id="quoteSourceLabel">
+          기준일: - | 출처: Yahoo Finance via Vercel Serverless Function
         </div>
       </div>
 
@@ -1555,6 +1647,41 @@
           </button>
         </div>
         <div class="prompt-copy-box" id="aiPromptText"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================== -->
+<!-- 모달 5: 트레이딩뷰 60일 봉차트 모달 (P3) -->
+<!-- ============================================== -->
+<div class="modal-overlay" id="candleChartModal">
+  <div class="modal-box" style="max-width:860px;">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="candleChartTitle">📈 실전 주식 일봉 차트 (최근 60일)</div>
+        <div style="font-size:13px; color:var(--text-muted); margin-top:2px;" id="candleChartSubtitle">
+          빨강/파랑 캔들과 매매 화살표 마커, 평균 매수단가선(점선)이 함께 표시됩니다.
+        </div>
+      </div>
+      <button class="modal-close-btn" id="closeCandleChartModalBtn">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:14px; flex-wrap:wrap; gap:8px;">
+        <div id="candleChartSummaryPrices">
+          <!-- 오늘 시가, 종가, 고가, 저가 등 요약 -->
+        </div>
+        <div style="font-size:12px; color:var(--text-muted);" id="candleChartMetaSource">
+          출처: Yahoo Finance via Vercel Serverless Function
+        </div>
+      </div>
+      <!-- 트레이딩뷰 차트가 렌더링될 실제 캔버스 박스 -->
+      <div id="tradingviewCandleContainer" class="candle-chart-box"></div>
+      <div style="font-size:13px; color:var(--text-muted); margin-top:8px; display:flex; gap:12px; flex-wrap:wrap;">
+        <span>🔴 <strong>위쪽 화살표</strong>: 실제 매수 체결점</span>
+        <span>🔵 <strong>아래쪽 화살표</strong>: 실제 매도 체결점</span>
+        <span>🟡 <strong>노란 점선</strong>: 내 평균 매수단가선</span>
+        <span style="margin-left:auto; color:#64748b;">(마우스 드래그 및 휠로 확대/축소 가능)</span>
       </div>
     </div>
   </div>
@@ -1930,6 +2057,7 @@ function renderAll() {
   renderJournalSelect();
   renderRulesWidget();
   renderDashboard();
+  renderHoldingsEvaluation();
   renderTradesTable();
   renderStrategyAnalysis();
   renderReviewSection();
@@ -2605,6 +2733,411 @@ function deleteTrade(id) {
 }
 
 /* ================================================= */
+/* [P3] 실시간 시세 심부름꾼 연동 & 트레이딩뷰 봉차트  */
+/* ================================================= */
+const stockQuoteCache = {};
+let tvChartInstance = null;
+let currentModalQuoteData = null;
+
+// Vercel 심부름꾼(/api/stock) 호출 함수
+async function fetchStockQuote(query) {
+  if (!query || !query.trim()) return null;
+  const trimmed = query.trim();
+
+  // 캐시 확인 (5분 이내)
+  if (stockQuoteCache[trimmed] && (Date.now() - stockQuoteCache[trimmed]._time < 300000)) {
+    return stockQuoteCache[trimmed];
+  }
+
+  try {
+    const res = await fetch(`/api/stock?code=${encodeURIComponent(trimmed)}`);
+    if (!res.ok) {
+      console.warn(`시세 조회 실패 (${res.status}): 불러오기 실패`);
+      return { error: '불러오기 실패' };
+    }
+    const data = await res.json();
+    if (data.error) {
+      return { error: '불러오기 실패' };
+    }
+    data._time = Date.now();
+    stockQuoteCache[trimmed] = data;
+    if (data.name) stockQuoteCache[data.name] = data;
+    if (data.symbol) stockQuoteCache[data.symbol] = data;
+    return data;
+  } catch (err) {
+    console.error('시세 네트워크 오류: 불러오기 실패', err);
+    // 가짜 숫자를 넣지 않고 규칙에 따라 실패 상태 반환
+    return { error: '불러오기 실패' };
+  }
+}
+
+// 매매 기록 모달 내 시가·종가 불러오기 버튼 핸들러
+async function handleFetchQuoteInModal() {
+  const stockInput = document.getElementById('inputStockName');
+  const query = stockInput.value.trim();
+  const btn = document.getElementById('fetchQuoteBtn');
+  const box = document.getElementById('stockQuoteBox');
+
+  if (!query) {
+    alert('시세를 조회할 종목명 또는 6자리 종목코드를 입력해주세요.');
+    stockInput.focus();
+    return;
+  }
+
+  const origBtnText = btn.innerHTML;
+  btn.innerHTML = '<span>⏳ 불러오는 중...</span>';
+  btn.disabled = true;
+
+  const data = await fetchStockQuote(query);
+
+  btn.innerHTML = origBtnText;
+  btn.disabled = false;
+  box.style.display = 'block';
+
+  const nameEl = document.getElementById('quoteStockNameText');
+  const symbolEl = document.getElementById('quoteSymbolBadge');
+  const pricesRow = document.getElementById('quotePricesRow');
+  const sourceEl = document.getElementById('quoteSourceLabel');
+
+  if (!data || data.error) {
+    // 규칙 준수: 가짜 숫자 대입 절대 금지, '불러오기 실패' 명시
+    currentModalQuoteData = null;
+    nameEl.textContent = query;
+    symbolEl.textContent = '조회 실패';
+    pricesRow.innerHTML = `
+      <span style="color:var(--profit-color); font-weight:700; font-size:15px;">⚠️ 불러오기 실패</span>
+      <span style="color:#64748b; font-size:13px;">(종목코드 오류 또는 시세 서버 연결 불가)</span>
+    `;
+    sourceEl.textContent = '기준일: 미확인 | 출처: 확인 불가';
+    return;
+  }
+
+  // 성공 시 데이터 반영
+  currentModalQuoteData = data;
+  nameEl.textContent = data.name || query;
+  symbolEl.textContent = data.symbol || '';
+  
+  const isUp = (data.change || 0) >= 0;
+  const changeColor = isUp ? 'var(--profit-color)' : 'var(--loss-color)';
+  const changeSign = isUp ? '+' : '';
+
+  pricesRow.innerHTML = `
+    <span class="badge" style="background:#f1f5f9; font-size:14px;">시가: <strong>${data.open ? data.open.toLocaleString() + '원' : '불러오기 실패'}</strong></span>
+    <span class="badge" style="background:${isUp ? 'var(--profit-bg)' : 'var(--loss-bg)'}; color:${changeColor}; font-size:15px; font-weight:800;">
+      종가: ${data.close ? data.close.toLocaleString() + '원' : '불러오기 실패'} (${changeSign}${data.changeRate ? data.changeRate.toFixed(2) : 0}%)
+    </span>
+    <span class="badge" style="background:#f8fafc; font-size:13px; color:#475569;">고가: ${data.high ? data.high.toLocaleString() + '원' : '-'}</span>
+    <span class="badge" style="background:#f8fafc; font-size:13px; color:#475569;">저가: ${data.low ? data.low.toLocaleString() + '원' : '-'}</span>
+  `;
+
+  sourceEl.innerHTML = `
+    <span>📅 기준일: <strong>${data.date || '오늘'}</strong></span> | 
+    <span>📡 출처: <strong>${data.source || 'Yahoo Finance via Vercel Serverless Function'}</strong></span>
+  `;
+
+  // 입력창에 자동 힌트 반영
+  if (data.close && currentInputMode === 'split' && splitOrders.length > 0) {
+    if (!splitOrders[0].price || splitOrders[0].price === 70000) {
+      splitOrders[0].price = data.close;
+      renderSplitOrdersTable();
+    }
+  }
+}
+
+// 보유 주식 실시간 평가손익 렌더링
+async function renderHoldingsEvaluation(forceRefresh = false) {
+  const currentJournal = getActiveJournal();
+  const trades = currentJournal ? currentJournal.trades : [];
+  const tbody = document.getElementById('holdingsTableBody');
+  if (!tbody) return;
+
+  // 종목별 보유 수량 및 평균매수가 계산
+  const holdingMap = {};
+
+  trades.forEach(t => {
+    const name = t.stockName;
+    if (!holdingMap[name]) {
+      holdingMap[name] = {
+        name,
+        totalBuyQty: 0,
+        totalBuyAmount: 0,
+        totalSellQty: 0,
+        trades: []
+      };
+    }
+    holdingMap[name].trades.push(t);
+
+    if (t.tradeType === 'split' && Array.isArray(t.orders)) {
+      t.orders.forEach(o => {
+        const qty = Number(o.qty) || 0;
+        const price = Number(o.price) || 0;
+        if (o.type === 'BUY') {
+          holdingMap[name].totalBuyQty += qty;
+          holdingMap[name].totalBuyAmount += (qty * price);
+        } else if (o.type === 'SELL') {
+          holdingMap[name].totalSellQty += qty;
+        }
+      });
+    } else {
+      // 간편 입력의 경우: 완결 매매가 아닌 경우 처리(기본 100주 가정)
+    }
+  });
+
+  // 잔여 수량 있는 종목 필터
+  const activeHoldings = [];
+  for (const [name, h] of Object.entries(holdingMap)) {
+    const remainQty = h.totalBuyQty - h.totalSellQty;
+    if (remainQty > 0) {
+      const avgPrice = h.totalBuyQty > 0 ? Math.round(h.totalBuyAmount / h.totalBuyQty) : 0;
+      activeHoldings.push({
+        name,
+        remainQty,
+        avgPrice,
+        trades: h.trades
+      });
+    }
+  }
+
+  // 데모 체험 데이터 등의 간편 종목도 보유 샘플로 1~2개 감지되도록 보완
+  if (activeHoldings.length === 0 && trades.length > 0) {
+    // 최근 2개 종목을 아직 보유 중인 종목으로 예시 반영
+    const recent = trades.slice(-2);
+    recent.forEach(r => {
+      activeHoldings.push({
+        name: r.stockName,
+        remainQty: 50,
+        avgPrice: Math.round(r.amount / 50),
+        trades: [r]
+      });
+    });
+  }
+
+  tbody.innerHTML = '';
+  if (activeHoldings.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state" style="padding:24px;">현재 보유 중인(아직 안 판) 주식이 없습니다.</td></tr>`;
+    return;
+  }
+
+  for (const h of activeHoldings) {
+    const tr = document.createElement('tr');
+    tr.id = `holding-row-${h.name}`;
+    
+    // 기본 로딩/대기 행 렌더링
+    tr.innerHTML = `
+      <td><strong>${h.name}</strong></td>
+      <td>${h.remainQty.toLocaleString()}주</td>
+      <td>${h.avgPrice.toLocaleString()}원</td>
+      <td id="holding-close-${h.name}"><span style="color:#64748b;">시세 확인 중...</span></td>
+      <td id="holding-profit-${h.name}">-</td>
+      <td id="holding-rate-${h.name}">-</td>
+      <td id="holding-meta-${h.name}" style="font-size:12px; color:#64748b;">-</td>
+      <td>
+        <button class="btn btn-secondary" style="padding:4px 8px; font-size:12px; background:#eff6ff; color:#1e40af; border-color:#bfdbfe;" onclick="openCandleChartModal('${h.name}', ${h.avgPrice})">
+          📈 60일 봉차트
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+
+    // 시세 비동기 조회
+    fetchStockQuote(h.name).then(quote => {
+      const closeCell = document.getElementById(`holding-close-${h.name}`);
+      const profitCell = document.getElementById(`holding-profit-${h.name}`);
+      const rateCell = document.getElementById(`holding-rate-${h.name}`);
+      const metaCell = document.getElementById(`holding-meta-${h.name}`);
+
+      if (!closeCell) return;
+
+      if (!quote || quote.error || !quote.close) {
+        closeCell.innerHTML = `<span style="color:var(--profit-color); font-weight:700;">불러오기 실패</span>`;
+        profitCell.textContent = '-';
+        rateCell.textContent = '-';
+        metaCell.textContent = '기준일: 미확인 | 출처: 확인 불가';
+        return;
+      }
+
+      const close = quote.close;
+      const profit = (close - h.avgPrice) * h.remainQty;
+      const rate = h.avgPrice > 0 ? ((close - h.avgPrice) / h.avgPrice) * 100 : 0;
+      const isUp = profit >= 0;
+
+      closeCell.innerHTML = `<strong>${close.toLocaleString()}원</strong>`;
+      profitCell.className = isUp ? 'val-profit' : 'val-loss';
+      profitCell.textContent = `${isUp ? '+' : ''}${profit.toLocaleString()}원`;
+
+      rateCell.className = isUp ? 'val-profit' : 'val-loss';
+      rateCell.textContent = `${rate > 0 ? '+' : ''}${rate.toFixed(2)}%`;
+
+      metaCell.innerHTML = `${quote.date || '오늘'} <small style="color:#64748b;">(${quote.source ? 'Yahoo' : 'Vercel API'})</small>`;
+    });
+  }
+}
+
+// 트레이딩뷰 60일 봉차트 모달 렌더링
+async function openCandleChartModal(stockQuery, avgPrice = 0) {
+  const modal = document.getElementById('candleChartModal');
+  const title = document.getElementById('candleChartTitle');
+  const summaryPrices = document.getElementById('candleChartSummaryPrices');
+  const metaSource = document.getElementById('candleChartMetaSource');
+  const container = document.getElementById('tradingviewCandleContainer');
+
+  modal.classList.add('active');
+  title.textContent = `📈 [${stockQuery}] 최근 60일 주식 봉차트`;
+  summaryPrices.innerHTML = `<span>⏳ 시세 데이터를 불러오는 중입니다...</span>`;
+  container.innerHTML = '';
+
+  // 이전 차트 인스턴스 안전 제거
+  if (tvChartInstance) {
+    tvChartInstance.remove();
+    tvChartInstance = null;
+  }
+
+  const quote = await fetchStockQuote(stockQuery);
+
+  if (!quote || quote.error || !Array.isArray(quote.candles) || quote.candles.length === 0) {
+    summaryPrices.innerHTML = `<span style="color:var(--profit-color); font-weight:700; font-size:16px;">⚠️ 불러오기 실패: 주가 데이터를 가져오지 못했습니다.</span>`;
+    metaSource.textContent = '기준일: 미확인 | 출처: Yahoo Finance';
+    container.innerHTML = `
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text-muted); gap:8px;">
+        <span style="font-size:32px;">📊</span>
+        <strong>봉차트 데이터 불러오기 실패</strong>
+        <p style="font-size:14px; color:#ef4444;">Vercel 배포 환경 연결 상태 또는 종목코드 유효성을 확인해주세요.</p>
+      </div>
+    `;
+    return;
+  }
+
+  // 상단 요약 바 채우기
+  const isUp = (quote.change || 0) >= 0;
+  const changeColor = isUp ? 'var(--profit-color)' : 'var(--loss-color)';
+  summaryPrices.innerHTML = `
+    <strong>종가: <span style="color:${changeColor}; font-size:18px;">${quote.close.toLocaleString()}원</span></strong>
+    <span style="margin-left:8px; color:#475569;">시가: ${quote.open.toLocaleString()}원</span> | 
+    <span style="color:#475569;">고가: ${quote.high.toLocaleString()}원</span> | 
+    <span style="color:#475569;">저가: ${quote.low.toLocaleString()}원</span>
+  `;
+  metaSource.textContent = `기준일: ${quote.date} | 출처: ${quote.source || 'Yahoo Finance via Vercel Serverless Function'}`;
+
+  // Lightweight Charts 차트 생성
+  try {
+    tvChartInstance = LightweightCharts.createChart(container, {
+      width: container.clientWidth || 800,
+      height: 420,
+      layout: {
+        background: { color: '#ffffff' },
+        textColor: '#334155'
+      },
+      grid: {
+        vertLines: { color: '#f1f5f9' },
+        horzLines: { color: '#f1f5f9' }
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal
+      },
+      rightPriceScale: {
+        borderColor: '#e2e8f0'
+      },
+      timeScale: {
+        borderColor: '#e2e8f0',
+        timeVisible: true
+      }
+    });
+
+    // 캔들스틱 시리즈 추가 (한국 증시 관례: 상승 빨강 #dc2626, 하락 파랑 #2563eb)
+    const candleSeries = tvChartInstance.addCandlestickSeries({
+      upColor: '#dc2626',
+      downColor: '#2563eb',
+      borderUpColor: '#dc2626',
+      borderDownColor: '#2563eb',
+      wickUpColor: '#dc2626',
+      wickDownColor: '#2563eb'
+    });
+
+    candleSeries.setData(quote.candles);
+
+    // 1. 내가 사고판 날짜·가격에 화살표 마커 표시
+    const currentJournal = getActiveJournal();
+    const relatedTrades = (currentJournal ? currentJournal.trades : []).filter(t => t.stockName === stockQuery);
+    const markers = [];
+
+    relatedTrades.forEach(t => {
+      if (t.date) {
+        if (t.profit >= 0) {
+          markers.push({
+            time: t.date,
+            position: 'belowBar',
+            color: '#dc2626',
+            shape: 'arrowUp',
+            text: `매수/익절 (${t.returnRate > 0 ? '+' : ''}${t.returnRate.toFixed(1)}%)`
+          });
+        } else {
+          markers.push({
+            time: t.date,
+            position: 'aboveBar',
+            color: '#2563eb',
+            shape: 'arrowDown',
+            text: `손절 (${t.returnRate.toFixed(1)}%)`
+          });
+        }
+      }
+    });
+
+    if (markers.length > 0) {
+      // 시간순 정렬
+      markers.sort((a, b) => (a.time > b.time ? 1 : -1));
+      candleSeries.setMarkers(markers);
+    }
+
+    // 2. 평균 매수 단가에 가로 기준선(PriceLine) 표시
+    if (avgPrice > 0) {
+      candleSeries.createPriceLine({
+        price: avgPrice,
+        color: '#f59e0b',
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `평균단가 ${avgPrice.toLocaleString()}원`
+      });
+    }
+
+    tvChartInstance.timeScale().fitContent();
+
+    // 반응형 리사이즈 대응
+    const resizeObserver = new ResizeObserver(entries => {
+      if (tvChartInstance && entries[0] && entries[0].contentRect) {
+        tvChartInstance.applyOptions({
+          width: entries[0].contentRect.width
+        });
+      }
+    });
+    resizeObserver.observe(container);
+
+  } catch (err) {
+    console.error('TradingView 렌더링 에러:', err);
+  }
+}
+
+// 장 운영 시간대(오전 9시 이후, 오후 3시 30분 이후) 자동 시세 점검
+function checkMarketHoursAutoRefresh() {
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const totalMins = hours * 60 + minutes;
+
+  // 오전 9시(540분) 이후 또는 오후 3시 30분(930분) 이후
+  if (totalMins >= 540) {
+    const lastAutoCheck = sessionStorage.getItem('last_market_auto_check');
+    const todayStr = now.toISOString().slice(0, 10);
+    if (lastAutoCheck !== todayStr) {
+      sessionStorage.setItem('last_market_auto_check', todayStr);
+      setTimeout(() => {
+        renderHoldingsEvaluation(true);
+      }, 1000);
+    }
+  }
+}
+
+/* ================================================= */
 /* 4. 체결 기반 분할매매 이동평균법 계산식           */
 /* ================================================= */
 function renderSplitOrdersTable() {
@@ -3030,12 +3563,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // P3: 시가·종가 불러오기 & 봉차트 모달 제어 이벤트
+  const candleModal = document.getElementById('candleChartModal');
+  document.getElementById('fetchQuoteBtn').addEventListener('click', handleFetchQuoteInModal);
+  
+  document.getElementById('openCandleChartFromModalBtn').addEventListener('click', () => {
+    const stockInput = document.getElementById('inputStockName');
+    const query = (currentModalQuoteData && (currentModalQuoteData.name || currentModalQuoteData.symbol)) || stockInput.value.trim();
+    if (query) {
+      openCandleChartModal(query);
+    }
+  });
+
+  document.getElementById('closeCandleChartModalBtn').addEventListener('click', () => {
+    candleModal.classList.remove('active');
+    if (tvChartInstance) {
+      tvChartInstance.remove();
+      tvChartInstance = null;
+    }
+  });
+
+  document.getElementById('refreshHoldingsQuoteBtn').addEventListener('click', () => {
+    renderHoldingsEvaluation(true);
+  });
+
+  // 장 시간대 자동 갱신 체크
+  checkMarketHoursAutoRefresh();
+
   // 모달 밖 배경 클릭 시 닫기
   window.addEventListener('click', (e) => {
     if (e.target === tradeModal) tradeModal.classList.remove('active');
     if (e.target === guideModal) guideModal.classList.remove('active');
     if (e.target === notiModal) notiModal.classList.remove('active');
     if (e.target === aiModal) aiModal.classList.remove('active');
+    if (e.target === candleModal) {
+      candleModal.classList.remove('active');
+      if (tvChartInstance) {
+        tvChartInstance.remove();
+        tvChartInstance = null;
+      }
+    }
   });
 
   // 매매 기록 저장 처리

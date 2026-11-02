@@ -67,6 +67,16 @@
 8. **초보자 작성 가이드 툴팁/모달**:
    - 매매일지 작성이 낯선 사용자를 위한 "좋은 복기 메모 작성법" 안내 가이드.
 
+### 3.4. P3 (확장 기능 - 실시간 주가 연동 & 실제 주식 봉차트)
+1. **Vercel 심부름꾼 파일(Serverless Function) 기반 주가 연동**:
+   - 브라우저의 CORS(보안 차단) 문제를 원천 해결하기 위해 웹사이트가 직접 외부를 호출하지 않고, Vercel 서버리스 함수(`/api/stock.js`)가 심부름꾼 역할을 맡아 야후 파이낸스(Yahoo Finance) 시세를 안전하게 받아와 전달.
+   - 종목코드(예: 삼성전자 `005930.KS`, SK하이닉스 `000660.KS`) 입력 시 당일 시가·종가·고가·저가(OHLC) 자동 조회 및 매매 일지 폼 자동 입력 지원.
+   - 외부 시세 서버 장애 또는 종목코드 오류 시 임의 가짜 숫자를 채우지 않고 **`'불러오기 실패'`**를 명확히 화면에 표시.
+2. **트레이딩뷰 라이트웨이트 차트 (TradingView Lightweight Charts)**:
+   - 글로벌 1위 트레이딩뷰의 무료 경량 오픈소스 차트를 활용한 고해상도 실제 일봉(캔들스틱) 및 거래량 차트 제공.
+   - 모바일/PC 완벽 반응형 터치 줌(확대/축소) 및 패닝(이동) 지원.
+   - 차트 위에 사용자의 실제 매수점(진입가)과 매도점(청산가)을 시각적 플래그/마커로 표시하여 직관적인 차트 복기 환경 구축.
+
 ---
 
 ## 4. 성공지표 (Success Metrics)
@@ -79,9 +89,12 @@
 
 ## 5. 기술 스택 (Tech Stack)
 - **프론트엔드 언어**: Pure HTML5, Modern CSS3 (CSS Variables, Flexbox, Grid), Vanilla JavaScript (ES6+)
-- **차트 라이브러리**: Chart.js (공식 무료 CDN: `https://cdn.jsdelivr.net/npm/chart.js`)
+- **차트 라이브러리**: 
+  - 손익 통계용: Chart.js (무료 CDN: `https://cdn.jsdelivr.net/npm/chart.js`)
+  - 실전 주식 봉차트용(P3): TradingView Lightweight Charts (무료 오픈소스 CDN: `https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js`)
+- **데이터 프록시 심부름꾼 (P3)**: Vercel Serverless Function (`/api/stock.js` - CORS 방지 및 야후 파이낸스 무료 시세 중계)
 - **영구 저장소**: Web Storage API (`localStorage`)
-- **버전 관리 및 배포**: Git, GitHub Repository, Vercel (또는 GitHub Pages) 정적 웹 배포
+- **버전 관리 및 배포**: Git, GitHub Repository, Vercel 웹 배포
 
 ---
 
