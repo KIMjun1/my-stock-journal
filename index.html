@@ -6,8 +6,8 @@
   <title>나만의 주식 매매복기·손익 대시보드</title>
   <!-- Chart.js 무료 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- TradingView Lightweight Charts 무료 CDN (P3 봉차트용) -->
-  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- TradingView Lightweight Charts 무료 CDN (안정 버전 4.2.1로 고정하여 호환성 보장) -->
+  <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <style>
     :root {
       --primary-color: #1e3a8a;
@@ -3043,15 +3043,24 @@ async function openCandleChartModal(stockQuery, avgPrice = 0) {
       }
     });
 
-    // 캔들스틱 시리즈 추가 (한국 증시 관례: 상승 빨강 #dc2626, 하락 파랑 #2563eb)
-    const candleSeries = tvChartInstance.addCandlestickSeries({
+    // 캔들스틱 시리즈 추가 (한국 증시 관례: 상승 빨강 #dc2626, 하락 파랑 #2563eb / v4 및 v5 버전 호환 안전장치)
+    const candleOptions = {
       upColor: '#dc2626',
       downColor: '#2563eb',
       borderUpColor: '#dc2626',
       borderDownColor: '#2563eb',
       wickUpColor: '#dc2626',
       wickDownColor: '#2563eb'
-    });
+    };
+
+    let candleSeries;
+    if (typeof tvChartInstance.addCandlestickSeries === 'function') {
+      candleSeries = tvChartInstance.addCandlestickSeries(candleOptions);
+    } else if (typeof tvChartInstance.addSeries === 'function' && LightweightCharts && LightweightCharts.CandlestickSeries) {
+      candleSeries = tvChartInstance.addSeries(LightweightCharts.CandlestickSeries, candleOptions);
+    } else {
+      throw new Error('트레이딩뷰 라이브러리 초기화 실패: 메서드를 찾을 수 없습니다.');
+    }
 
     candleSeries.setData(quote.candles);
 
